@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Neon Space Shooter</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div id="ui-layer">
+        <div id="score-board">Score: <span id="score">0</span></div>
+        <div id="health-container">
+            <div id="health-bar"></div>
+        </div>
+        <div id="missile-display"
+            style="position:absolute; bottom:20px; right:20px; font-size:20px; color:#ff00ff; text-shadow:0 0 10px #ff00ff; pointer-events: none;">
+            Missiles: <span id="missile-count">3</span>
+        </div>
+        <div id="start-screen">
+            <h1 class="glow-text">NEON VOID</h1>
+            <p>WASD to Move | Left Click Shoot | Right Click Missile</p>
+            <button id="start-btn">INITIATE SEQUENCE</button>
+        </div>
+        <div id="game-over-screen" class="hidden">
+            <h1 class="glow-text text-red">CRITICAL FAILURE</h1>
+            <p>Final Score: <span id="final-score">0</span></p>
+            <button id="restart-btn">REBOOT SYSTEM</button>
+        </div>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+    <script src="script.js"></script>
+</body>
+
+</html>

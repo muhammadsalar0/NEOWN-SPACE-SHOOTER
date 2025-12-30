@@ -1,0 +1,116 @@
+:root {
+    --neon-blue: #00f3ff;
+    --neon-pink: #ff00ff;
+    --neon-green: #0aff00;
+    --neon-red: #ff003c;
+    --bg-dark: #050510;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background-color: var(--bg-dark);
+    font-family: 'Orbitron', sans-serif;
+    color: white;
+}
+
+#gameCanvas {
+    display: block;
+}
+
+#ui-layer {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+}
+
+#score-board {
+    position: absolute;
+    top: 20px;
+    left: 20px;
+    font-size: 24px;
+    text-shadow: 0 0 10px var(--neon-blue);
+    pointer-events: auto;
+}
+
+#health-container {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    width: 200px;
+    height: 20px;
+    border: 2px solid var(--neon-green);
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 0 10px var(--neon-green);
+}
+
+#health-bar {
+    width: 100%;
+    height: 100%;
+    background-color: var(--neon-green);
+    box-shadow: 0 0 20px var(--neon-green);
+    transition: width 0.3s ease;
+}
+
+#start-screen, #game-over-screen {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    background: rgba(0, 0, 0, 0.85);
+    padding: 40px;
+    border: 1px solid var(--neon-blue);
+    box-shadow: 0 0 20px rgba(0, 243, 255, 0.2);
+    border-radius: 8px;
+    pointer-events: auto;
+    backdrop-filter: blur(5px);
+}
+
+.hidden {
+    display: none !important;
+}
+
+.glow-text {
+    font-size: 48px;
+    margin-bottom: 20px;
+    color: var(--neon-blue);
+    text-shadow: 0 0 10px var(--neon-blue), 0 0 20px var(--neon-blue);
+    letter-spacing: 4px;
+}
+
+.text-red {
+    color: var(--neon-red);
+    text-shadow: 0 0 10px var(--neon-red), 0 0 20px var(--neon-red);
+}
+
+button {
+    background: transparent;
+    border: 2px solid var(--neon-green);
+    color: var(--neon-green);
+    padding: 15px 30px;
+    font-family: 'Orbitron', sans-serif;
+    font-size: 18px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    box-shadow: 0 0 10px rgba(10, 255, 0, 0.2);
+}
+
+button:hover {
+    background: var(--neon-green);
+    color: black;
+    box-shadow: 0 0 20px rgba(10, 255, 0, 0.6);
+}
+
+p {
+    font-size: 14px;
+    margin-bottom: 30px;
+    color: #aaa;
+    letter-spacing: 1px;
+}
