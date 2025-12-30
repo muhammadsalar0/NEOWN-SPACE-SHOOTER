@@ -1,6 +1,9 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
+const shipImage = new Image();
+shipImage.src = 'spaceship.png';
+
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
@@ -137,20 +140,27 @@ class Player {
         ctx.rotate(this.angle + Math.PI / 2); 
         
         // Ship Body
-        ctx.beginPath();
-        ctx.moveTo(0, -this.radius);
-        ctx.lineTo(this.radius, this.radius);
-        ctx.lineTo(0, this.radius * 0.5);
-        ctx.lineTo(-this.radius, this.radius);
-        ctx.closePath();
+        if (shipImage.complete) {
+            ctx.drawImage(shipImage, -this.radius * 2, -this.radius * 2, this.radius * 4, this.radius * 4);
+        } else {
+            // Fallback if image not loaded
+            ctx.beginPath();
+            ctx.moveTo(0, -this.radius);
+            ctx.lineTo(this.radius, this.radius);
+            ctx.lineTo(0, this.radius * 0.5);
+            ctx.lineTo(-this.radius, this.radius);
+            ctx.closePath();
+            
+            ctx.fillStyle = this.color;
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = this.color;
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        }
         
-        ctx.fillStyle = this.color;
-        ctx.shadowBlur = 15;
-        ctx.shadowColor = this.color;
-        ctx.fill();
-        ctx.shadowBlur = 0;
-        
-        // Thruster
+        // Thruster (only if image not loaded or if you want extra effect)
+        // Keeping it disabled for now as the sprite has engines
+        /*
         if (gameRunning && (keys.w || keys.a || keys.s || keys.d)) {
              ctx.beginPath();
              ctx.moveTo(-5, this.radius * 0.8);
@@ -159,6 +169,7 @@ class Player {
              ctx.fillStyle = '#ff9900';
              ctx.fill();
         }
+        */
         
         // Shield Visual
         if (this.powerUps.shield > 0) {
