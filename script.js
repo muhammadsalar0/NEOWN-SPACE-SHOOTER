@@ -11,7 +11,7 @@ const PLAYER_FRICTION = 0.94;
 const BULLET_SPEED = 12;
 const ENEMY_BULLET_SPEED = 5;
 const PARTICLE_FRICTION = 0.95;
-let ENEMY_SPAWN_RATE = 1000;
+let ENEMY_SPAWN_RATE = 999;
 
 // --- State ---
 let gameRunning = false;
