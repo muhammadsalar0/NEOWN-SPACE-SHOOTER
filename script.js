@@ -1,9 +1,6 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 
-const shipImage = new Image();
-shipImage.src = 'spaceship.png';
-
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
@@ -39,29 +36,204 @@ const missileCountEl = document.getElementById('missile-count');
 
 class BackgroundStar {
     constructor() {
+        this.reset();
+        this.y = Math.random() * canvas.height; // Start randomly on screen
+    }
+
+    reset() {
         this.x = Math.random() * canvas.width;
-        this.y = Math.random() * canvas.height;
-        this.radius = Math.random() * 1.5;
-        this.alpha = Math.random();
-        this.velocity = Math.random() * 0.5 + 0.1; 
+        this.y = 0;
+        this.depth = Math.random() * 3 + 1; // 1 (close) to 4 (far)
+        this.radius = Math.random() * 1.5 / (this.depth * 0.5);
+        this.baseAlpha = Math.random() * 0.5 + 0.3;
+        this.alpha = this.baseAlpha;
+        this.velocity = (Math.random() * 0.5 + 0.1) / (this.depth * 0.5);
+        this.twinkleSpeed = Math.random() * 0.05 + 0.01;
+        this.twinkleDir = 1;
+        
+        // Slight tint
+        const tint = Math.random();
+        if (tint > 0.8) this.color = '#cceeff'; // blueish
+        else if (tint < 0.2) this.color = '#ffffee'; // yellowish
+        else this.color = 'white';
     }
 
     draw() {
         ctx.save();
-        ctx.globalAlpha = this.alpha;
+        ctx.globalAlpha = this.alpha / (this.depth * 0.5);
         ctx.beginPath();
         ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
-        ctx.fillStyle = 'white';
+        ctx.fillStyle = this.color;
         ctx.fill();
+        ctx.restore();
+    }
+
+    update() {
+        // Twinkle
+        this.alpha += this.twinkleSpeed * this.twinkleDir;
+        if (this.alpha > this.baseAlpha + 0.2 || this.alpha < this.baseAlpha - 0.2) {
+            this.twinkleDir *= -1;
+        }
+
+        this.draw();
+        this.y += this.velocity;
+        if (this.y > canvas.height) {
+            this.reset();
+            this.y = 0; // Ensure it starts at top
+        }
+    }
+}
+
+class Planet {
+    constructor(yStart) {
+        this.resize(yStart);
+    }
+
+    resize(yStart) {
+        this.radius = Math.random() * 50 + 30; // 30 to 80 radius
+        
+        // Anti-overlap logic
+        let safe = false;
+        let attempts = 0;
+        
+        while (!safe && attempts < 50) {
+            this.x = Math.random() * (canvas.width - this.radius * 2) + this.radius;
+            this.y = yStart !== undefined ? yStart : -this.radius - 50; 
+            
+            // Check collision with other planets
+            safe = true;
+            for (let other of planets) {
+                if (other === this) continue;
+                const dist = Math.hypot(this.x - other.x, this.y - other.y);
+                if (dist < this.radius + other.radius + 50) { // 50px buffer
+                    safe = false;
+                    break;
+                }
+            }
+            if(yStart !== undefined) break; // Don't retry Y for initial spawn, just X
+            attempts++;
+        }
+        
+        this.velocity = Math.random() * 0.1 + 0.02; // Slow drift
+        this.type = Math.random(); 
+        this.features = [];
+
+        // Colors & Features (Same as before)
+        if (this.type < 0.4) { // Gas Giant
+             this.planetType = 'GAS';
+             const hue = Math.random() * 40 + 10; 
+             this.colorBase = `hsl(${hue}, 70%, 50%)`;
+             this.hasRing = Math.random() > 0.4;
+             
+             const numBands = Math.floor(Math.random() * 5 + 3);
+             for(let i=0; i<numBands; i++) {
+                 this.features.push({
+                     y: (Math.random() - 0.5) * 2 * this.radius, 
+                     h: Math.random() * 10 + 5,
+                     color: `hsla(${hue}, ${60 + Math.random()*20}%, ${40 + Math.random()*20}%, 0.6)`
+                 });
+             }
+             
+        } else if (this.type < 0.7) { // Ice World
+             this.planetType = 'ICE';
+             const hue = Math.random() * 40 + 180; 
+             this.colorBase = `hsl(${hue}, 70%, 70%)`;
+             this.hasRing = Math.random() > 0.8;
+             
+             const numCraters = Math.floor(Math.random() * 5 + 2);
+             for(let i=0; i<numCraters; i++) {
+                 this.features.push({
+                     x: (Math.random() - 0.5) * 1.5 * this.radius,
+                     y: (Math.random() - 0.5) * 1.5 * this.radius,
+                     r: Math.random() * 10 + 2,
+                     color: `hsla(${hue}, 80%, 90%, 0.4)`
+                 });
+             }
+
+        } else { // Terrestrial
+             this.planetType = 'TERRA';
+             const hue = Math.random() * 60 + 90; 
+             this.colorBase = `hsl(${hue}, 50%, 40%)`;
+             this.hasRing = false;
+             
+             const numContinents = Math.floor(Math.random() * 6 + 3);
+             for(let i=0; i<numContinents; i++) {
+                 this.features.push({
+                     x: (Math.random() - 0.5) * 1.5 * this.radius,
+                     y: (Math.random() - 0.5) * 1.5 * this.radius,
+                     r: Math.random() * 15 + 5,
+                     color: `hsla(${hue + 20}, 60%, 30%, 0.5)`
+                 });
+             }
+        }
+    }
+
+    draw() {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        
+        ctx.shadowBlur = 30;
+        ctx.shadowColor = this.colorBase;
+        
+        if (this.hasRing) {
+             ctx.beginPath();
+             ctx.ellipse(0, 0, this.radius * 2.2, this.radius * 0.6, 0.2, Math.PI, Math.PI * 2);
+             ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+             ctx.lineWidth = this.radius * 0.1;
+             ctx.stroke();
+        }
+        ctx.shadowBlur = 0; 
+
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = this.colorBase;
+        ctx.fill();
+        
+        ctx.save();
+        ctx.clip();
+        
+        if (this.planetType === 'GAS') {
+            this.features.forEach(band => {
+                ctx.fillStyle = band.color;
+                ctx.fillRect(-this.radius, band.y, this.radius * 2, band.h);
+            });
+        } else {
+            this.features.forEach(feat => {
+                ctx.beginPath();
+                ctx.arc(feat.x, feat.y, feat.r, 0, Math.PI * 2);
+                ctx.fillStyle = feat.color;
+                ctx.fill();
+            });
+        }
+        
+        const grad = ctx.createRadialGradient(-this.radius * 0.3, -this.radius * 0.3, this.radius * 0.2, 0, 0, this.radius);
+        grad.addColorStop(0, 'rgba(255,255,255,0.1)');
+        grad.addColorStop(0.5, 'transparent');
+        grad.addColorStop(1, 'rgba(0,0,0,0.7)');
+        
+        ctx.beginPath();
+        ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
+        ctx.fillStyle = grad;
+        ctx.fill();
+        
+        ctx.restore(); 
+        
+        if (this.hasRing) {
+             ctx.beginPath();
+             ctx.ellipse(0, 0, this.radius * 2.2, this.radius * 0.6, 0.2, 0, Math.PI);
+             ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+             ctx.lineWidth = this.radius * 0.1;
+             ctx.stroke();
+        }
+
         ctx.restore();
     }
 
     update() {
         this.draw();
         this.y += this.velocity;
-        if (this.y > canvas.height) {
-            this.y = 0;
-            this.x = Math.random() * canvas.width;
+        if (this.y > canvas.height + this.radius + 50) {
+            this.resize(); // Will find new safe spot at top
         }
     }
 }
@@ -73,19 +245,18 @@ class PowerUp {
         this.radius = 12;
         this.velocity = { x: 0, y: 2 };
         
-        // Random Type
         const rand = Math.random();
         if (rand < 0.33) {
             this.type = 'SPREAD';
-            this.color = '#ffff00'; // Yellow
+            this.color = '#ffff00'; 
             this.label = 'S';
         } else if (rand < 0.66) {
             this.type = 'RAPID';
-            this.color = '#ff003c'; // Red
+            this.color = '#ff003c'; 
             this.label = 'R';
         } else {
             this.type = 'SHIELD';
-            this.color = '#00f3ff'; // Cyan
+            this.color = '#00f3ff'; 
             this.label = 'H';
         }
     }
@@ -116,7 +287,7 @@ class Player {
     constructor(x, y) {
         this.x = x;
         this.y = y;
-        this.radius = 15;
+        this.radius = 20; // Slightly larger hitbox for visual alignment
         this.color = '#00f3ff';
         this.velocity = { x: 0, y: 0 };
         this.maxHp = 100;
@@ -125,13 +296,13 @@ class Player {
         this.missiles = 3;
         this.missileTimer = 0;
         
-        // PowerUp States
         this.powerUps = {
             spread: 0,
             rapid: 0,
             shield: 0
         };
         this.fireCooldown = 0;
+        this.enginePulse = 0;
     }
 
     draw() {
@@ -139,45 +310,100 @@ class Player {
         ctx.translate(this.x, this.y);
         ctx.rotate(this.angle + Math.PI / 2); 
         
-        // Ship Body
-        if (shipImage.complete) {
-            ctx.drawImage(shipImage, -this.radius * 2, -this.radius * 2, this.radius * 4, this.radius * 4);
-        } else {
-            // Fallback if image not loaded
-            ctx.beginPath();
-            ctx.moveTo(0, -this.radius);
-            ctx.lineTo(this.radius, this.radius);
-            ctx.lineTo(0, this.radius * 0.5);
-            ctx.lineTo(-this.radius, this.radius);
-            ctx.closePath();
-            
-            ctx.fillStyle = this.color;
-            ctx.shadowBlur = 15;
-            ctx.shadowColor = this.color;
-            ctx.fill();
-            ctx.shadowBlur = 0;
-        }
+        // Engine Glow
+        this.enginePulse += 0.1;
+        const glowSize = Math.sin(this.enginePulse) * 5 + 15;
         
-        // Thruster (only if image not loaded or if you want extra effect)
-        // Keeping it disabled for now as the sprite has engines
-        /*
+        // Thrusters (Moving)
         if (gameRunning && (keys.w || keys.a || keys.s || keys.d)) {
+             ctx.shadowBlur = 20;
+             ctx.shadowColor = '#0aff00';
+             
+             // Main Thruster
              ctx.beginPath();
-             ctx.moveTo(-5, this.radius * 0.8);
-             ctx.lineTo(5, this.radius * 0.8);
-             ctx.lineTo(0, this.radius * 2 + Math.random() * 15);
-             ctx.fillStyle = '#ff9900';
+             ctx.fillStyle = '#0aff00';
+             ctx.moveTo(-8, 25);
+             ctx.lineTo(8, 25);
+             ctx.lineTo(0, 25 + Math.random() * 20 + 10);
              ctx.fill();
+             
+             // Side Thrusters
+             ctx.beginPath();
+             ctx.moveTo(-15, 20);
+             ctx.lineTo(-10, 20);
+             ctx.lineTo(-12.5, 20 + Math.random() * 10);
+             ctx.fill();
+             
+             ctx.beginPath();
+             ctx.moveTo(15, 20);
+             ctx.lineTo(10, 20);
+             ctx.lineTo(12.5, 20 + Math.random() * 10);
+             ctx.fill();
+             
+             ctx.shadowBlur = 0;
         }
-        */
+
+        // Ship Body Design
+        // Main Fuselage
+        ctx.beginPath();
+        ctx.moveTo(0, -25); // Nose
+        ctx.quadraticCurveTo(10, -5, 12, 15); // Right Side
+        ctx.lineTo(8, 25); // Right Engine
+        ctx.lineTo(-8, 25); // Left Engine
+        ctx.lineTo(-12, 15); // Left Side
+        ctx.quadraticCurveTo(-10, -5, 0, -25); // Left Curve to Nose
+        
+        const gradBody = ctx.createLinearGradient(0, -25, 0, 25);
+        gradBody.addColorStop(0, '#00f3ff');
+        gradBody.addColorStop(0.5, '#0055aa');
+        gradBody.addColorStop(1, '#002244');
+        ctx.fillStyle = gradBody;
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = '#00f3ff';
+        ctx.stroke();
+        
+        // Wings
+        ctx.beginPath();
+        ctx.moveTo(12, 5);
+        ctx.lineTo(35, 20); // Wing Tip
+        ctx.lineTo(12, 18); // Wing Back
+        ctx.closePath();
+        ctx.fillStyle = '#003366';
+        ctx.fill();
+        ctx.stroke();
+        
+        ctx.beginPath();
+        ctx.moveTo(-12, 5);
+        ctx.lineTo(-35, 20); // Wing Tip
+        ctx.lineTo(-12, 18); // Wing Back
+        ctx.closePath();
+        ctx.fillStyle = '#003366';
+        ctx.fill();
+        ctx.stroke();
+        
+        // Detail Lines
+        ctx.beginPath();
+        ctx.moveTo(0, -10);
+        ctx.lineTo(0, 20);
+        ctx.strokeStyle = 'rgba(0, 243, 255, 0.3)';
+        ctx.stroke();
+        
+        // Cockpit
+        ctx.beginPath();
+        ctx.ellipse(0, -5, 4, 8, 0, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        ctx.fill();
         
         // Shield Visual
         if (this.powerUps.shield > 0) {
             ctx.beginPath();
-            ctx.arc(0, 0, this.radius + 10, 0, Math.PI * 2);
+            ctx.arc(0, 0, 40, 0, Math.PI * 2);
             ctx.strokeStyle = `rgba(0, 243, 255, ${Math.random() * 0.5 + 0.2})`;
             ctx.lineWidth = 2;
             ctx.stroke();
+            ctx.fillStyle = `rgba(0, 243, 255, 0.1)`;
+            ctx.fill();
         }
 
         ctx.restore();
@@ -509,6 +735,7 @@ let enemies = [];
 let particles = [];
 let powerUps = [];
 let stars = [];
+let planets = [];
 let keys = { w: false, a: false, s: false, d: false, space: false, mouseLeft: false };
 
 // --- Initialization ---
@@ -519,6 +746,7 @@ function init() {
     particles = [];
     powerUps = [];
     stars = [];
+    planets = [];
     score = 0;
     frames = 0;
     ENEMY_SPAWN_RATE = 1000;
@@ -526,9 +754,15 @@ function init() {
     if (healthBarEl) healthBarEl.style.width = '100%';
     if (missileCountEl) missileCountEl.innerText = 3;
     
-    for(let i=0; i<100; i++) {
+    for(let i=0; i<150; i++) {
         stars.push(new BackgroundStar());
     }
+    
+    // Create Planets
+    planets.push(new Planet(Math.random() * canvas.height)); 
+    planets.push(new Planet(Math.random() * canvas.height));
+    planets.push(new Planet(Math.random() * canvas.height));
+    planets.push(new Planet(Math.random() * canvas.height - canvas.height)); // Off-screen
 }
 
 function spawnEnemies() {
@@ -573,6 +807,7 @@ function animate() {
     ctx.fillRect(-shakeX, -shakeY, canvas.width, canvas.height);
     
     stars.forEach(star => star.update());
+    planets.forEach(planet => planet.update());
     
     player.update();
     
