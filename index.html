@@ -22,12 +22,22 @@
         <div id="start-screen">
             <h1 class="glow-text">NEON VOID</h1>
             <p>WASD to Move | Left Click Shoot | Right Click Missile</p>
-            <button id="start-btn">INITIATE SEQUENCE</button>
+            <button id="start-btn-keyboard">KEYBOARD & MOUSE</button>
+            <button id="start-btn-touch">TOUCH CONTROLS</button>
         </div>
         <div id="game-over-screen" class="hidden">
             <h1 class="glow-text text-red">CRITICAL FAILURE</h1>
             <p>Final Score: <span id="final-score">0</span></p>
             <button id="restart-btn">REBOOT SYSTEM</button>
+        </div>
+        <div id="mobile-controls" class="hidden">
+            <div id="joystick-zone">
+                <div id="joystick-knob"></div>
+            </div>
+            <div id="action-buttons">
+                <button id="fire-btn" class="touch-btn">FIRE</button>
+                <button id="missile-btn" class="touch-btn">MISSILE</button>
+            </div>
         </div>
     </div>
     <canvas id="gameCanvas"></canvas>
