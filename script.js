@@ -11,7 +11,7 @@ const PLAYER_FRICTION = 0.94;
 const BULLET_SPEED = 12;
 const ENEMY_BULLET_SPEED = 5;
 const PARTICLE_FRICTION = 0.95;
-let ENEMY_SPAWN_RATE = 999;
+let ENEMY_SPAWN_RATE = 2000;
 
 // --- State ---
 let gameRunning = false;
@@ -749,7 +749,7 @@ function init() {
     planets = [];
     score = 0;
     frames = 0;
-    ENEMY_SPAWN_RATE = 1000;
+    ENEMY_SPAWN_RATE = 2000;
     scoreEl.innerText = score;
     if (healthBarEl) healthBarEl.style.width = '100%';
     if (missileCountEl) missileCountEl.innerText = 3;
@@ -766,7 +766,7 @@ function init() {
 }
 
 function spawnEnemies() {
-    let currentSpawnRate = Math.max(400, 1000 - score / 5);
+    let currentSpawnRate = Math.max(800, 2000 - score / 10);
     
     if (frames % Math.floor(currentSpawnRate / 16) === 0) {
        const radius = 30;
