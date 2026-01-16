@@ -1,19 +1,34 @@
-const canvas = document.getElementById('gameCanvas');
-const ctx = canvas.getContext('2d');
+window.onerror = function(msg, url, line, col, error) {
+    const errorStr = `Error: ${msg}\nLine: ${line}\nCol: ${col}\nURL: ${url}`;
+    console.error(errorStr);
+    alert(errorStr);
+    const debugDiv = document.getElementById('debug-log');
+    if (debugDiv) {
+        debugDiv.classList.remove('hidden');
+        debugDiv.innerHTML += `<div>${errorStr}</div>`;
+    }
+};
 
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+function debugLog(message) {
+    console.log(message);
+    const debugDiv = document.getElementById('debug-log');
+    if (debugDiv) {
+        debugDiv.innerHTML += `<div>LOG: ${message}</div>`;
+    }
+}
 
-// --- Config ---
-const PLAYER_ACCEL = 0.5;
-const PLAYER_MAX_SPEED = 6;
-const PLAYER_FRICTION = 0.94;
-const BULLET_SPEED = 12;
-const ENEMY_BULLET_SPEED = 5;
-const PARTICLE_FRICTION = 0.95;
-let ENEMY_SPAWN_RATE = 2000;
-
-// --- State ---
+// Variables that need to be accessible globally or in the game loop
+let canvas, ctx;
+let player;
+let projectiles = [];
+let enemies = [];
+let particles = [];
+let powerUps = [];
+let stars = [];
+let planets = [];
+let keys = { w: false, a: false, s: false, d: false, space: false, mouseLeft: false };
+let joystickInput = { x: 0, y: 0, active: false };
+let mobileMode = false;
 let gameRunning = false;
 let score = 0;
 let animationId;
@@ -22,28 +37,62 @@ let mouseX = 0;
 let mouseY = 0;
 let screenShake = 0;
 
-// --- Elements ---
-const scoreEl = document.getElementById('score');
-const startScreen = document.getElementById('start-screen');
-const gameOverScreen = document.getElementById('game-over-screen');
-const finalScoreEl = document.getElementById('final-score');
-const startBtn = document.getElementById('start-btn');
-const restartBtn = document.getElementById('restart-btn');
-const healthBarEl = document.getElementById('health-bar');
-const missileCountEl = document.getElementById('missile-count');
+// Config
+const PLAYER_ACCEL = 0.5;
+const PLAYER_MAX_SPEED = 6;
+const PLAYER_FRICTION = 0.94;
+const BULLET_SPEED = 12;
+const ENEMY_BULLET_SPEED = 5;
+const PARTICLE_FRICTION = 0.95;
+let ENEMY_SPAWN_RATE = 2000;
+
+// UI Elements (assigned later)
+let scoreEl, startScreen, gameOverScreen, finalScoreEl, startBtnKeyboard, startBtnTouch, restartBtn, healthBarEl, missileCountEl, mobileControls, joystickZone, joystickKnob, fireBtn, missileBtn;
+
+window.addEventListener('load', () => {
+    debugLog("Initializing game...");
+    try {
+        canvas = document.getElementById('gameCanvas');
+        if (!canvas) throw new Error("Canvas element not found");
+        ctx = canvas.getContext('2d');
+        
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        scoreEl = document.getElementById('score');
+        startScreen = document.getElementById('start-screen');
+        gameOverScreen = document.getElementById('game-over-screen');
+        finalScoreEl = document.getElementById('final-score');
+        startBtnKeyboard = document.getElementById('start-btn-keyboard');
+        startBtnTouch = document.getElementById('start-btn-touch');
+        restartBtn = document.getElementById('restart-btn');
+        healthBarEl = document.getElementById('health-bar');
+        missileCountEl = document.getElementById('missile-count');
+        mobileControls = document.getElementById('mobile-controls');
+        joystickZone = document.getElementById('joystick-zone');
+        joystickKnob = document.getElementById('joystick-knob');
+        fireBtn = document.getElementById('fire-btn');
+        missileBtn = document.getElementById('missile-btn');
+
+        setupEventListeners();
+        debugLog("Initialization complete.");
+    } catch (e) {
+        debugLog("CRITICAL ERROR during init: " + e.message);
+    }
+});
 
 // --- Classes ---
 
 class BackgroundStar {
     constructor() {
         this.reset();
-        this.y = Math.random() * canvas.height; // Start randomly on screen
+        this.y = Math.random() * canvas.height;
     }
 
     reset() {
         this.x = Math.random() * canvas.width;
         this.y = 0;
-        this.depth = Math.random() * 3 + 1; // 1 (close) to 4 (far)
+        this.depth = Math.random() * 3 + 1;
         this.radius = Math.random() * 1.5 / (this.depth * 0.5);
         this.baseAlpha = Math.random() * 0.5 + 0.3;
         this.alpha = this.baseAlpha;
@@ -51,10 +100,9 @@ class BackgroundStar {
         this.twinkleSpeed = Math.random() * 0.05 + 0.01;
         this.twinkleDir = 1;
         
-        // Slight tint
         const tint = Math.random();
-        if (tint > 0.8) this.color = '#cceeff'; // blueish
-        else if (tint < 0.2) this.color = '#ffffee'; // yellowish
+        if (tint > 0.8) this.color = '#cceeff';
+        else if (tint < 0.2) this.color = '#ffffee';
         else this.color = 'white';
     }
 
@@ -69,7 +117,6 @@ class BackgroundStar {
     }
 
     update() {
-        // Twinkle
         this.alpha += this.twinkleSpeed * this.twinkleDir;
         if (this.alpha > this.baseAlpha + 0.2 || this.alpha < this.baseAlpha - 0.2) {
             this.twinkleDir *= -1;
@@ -79,7 +126,7 @@ class BackgroundStar {
         this.y += this.velocity;
         if (this.y > canvas.height) {
             this.reset();
-            this.y = 0; // Ensure it starts at top
+            this.y = 0;
         }
     }
 }
@@ -90,9 +137,7 @@ class Planet {
     }
 
     resize(yStart) {
-        this.radius = Math.random() * 50 + 30; // 30 to 80 radius
-        
-        // Anti-overlap logic
+        this.radius = Math.random() * 50 + 30;
         let safe = false;
         let attempts = 0;
         
@@ -100,26 +145,24 @@ class Planet {
             this.x = Math.random() * (canvas.width - this.radius * 2) + this.radius;
             this.y = yStart !== undefined ? yStart : -this.radius - 50; 
             
-            // Check collision with other planets
             safe = true;
             for (let other of planets) {
                 if (other === this) continue;
                 const dist = Math.hypot(this.x - other.x, this.y - other.y);
-                if (dist < this.radius + other.radius + 50) { // 50px buffer
+                if (dist < this.radius + other.radius + 50) {
                     safe = false;
                     break;
                 }
             }
-            if(yStart !== undefined) break; // Don't retry Y for initial spawn, just X
+            if(yStart !== undefined) break;
             attempts++;
         }
         
-        this.velocity = Math.random() * 0.1 + 0.02; // Slow drift
+        this.velocity = Math.random() * 0.1 + 0.02;
         this.type = Math.random(); 
         this.features = [];
 
-        // Colors & Features (Same as before)
-        if (this.type < 0.4) { // Gas Giant
+        if (this.type < 0.4) {
              this.planetType = 'GAS';
              const hue = Math.random() * 40 + 10; 
              this.colorBase = `hsl(${hue}, 70%, 50%)`;
@@ -133,8 +176,7 @@ class Planet {
                      color: `hsla(${hue}, ${60 + Math.random()*20}%, ${40 + Math.random()*20}%, 0.6)`
                  });
              }
-             
-        } else if (this.type < 0.7) { // Ice World
+        } else if (this.type < 0.7) {
              this.planetType = 'ICE';
              const hue = Math.random() * 40 + 180; 
              this.colorBase = `hsl(${hue}, 70%, 70%)`;
@@ -149,8 +191,7 @@ class Planet {
                      color: `hsla(${hue}, 80%, 90%, 0.4)`
                  });
              }
-
-        } else { // Terrestrial
+        } else {
              this.planetType = 'TERRA';
              const hue = Math.random() * 60 + 90; 
              this.colorBase = `hsl(${hue}, 50%, 40%)`;
@@ -171,7 +212,6 @@ class Planet {
     draw() {
         ctx.save();
         ctx.translate(this.x, this.y);
-        
         ctx.shadowBlur = 30;
         ctx.shadowColor = this.colorBase;
         
@@ -215,7 +255,6 @@ class Planet {
         ctx.arc(0, 0, this.radius, 0, Math.PI * 2);
         ctx.fillStyle = grad;
         ctx.fill();
-        
         ctx.restore(); 
         
         if (this.hasRing) {
@@ -225,7 +264,6 @@ class Planet {
              ctx.lineWidth = this.radius * 0.1;
              ctx.stroke();
         }
-
         ctx.restore();
     }
 
@@ -233,7 +271,7 @@ class Planet {
         this.draw();
         this.y += this.velocity;
         if (this.y > canvas.height + this.radius + 50) {
-            this.resize(); // Will find new safe spot at top
+            this.resize();
         }
     }
 }
@@ -287,7 +325,7 @@ class Player {
     constructor(x, y) {
         this.x = x;
         this.y = y;
-        this.radius = 20; // Slightly larger hitbox for visual alignment
+        this.radius = 20; 
         this.color = '#00f3ff';
         this.velocity = { x: 0, y: 0 };
         this.maxHp = 100;
@@ -310,16 +348,13 @@ class Player {
         ctx.translate(this.x, this.y);
         ctx.rotate(this.angle + Math.PI / 2); 
         
-        // Engine Glow
         this.enginePulse += 0.1;
         const glowSize = Math.sin(this.enginePulse) * 5 + 15;
         
-        // Thrusters (Moving)
-        if (gameRunning && (keys.w || keys.a || keys.s || keys.d)) {
+        if (gameRunning && (keys.w || keys.a || keys.s || keys.d || joystickInput.active)) {
              ctx.shadowBlur = 20;
              ctx.shadowColor = '#0aff00';
              
-             // Main Thruster
              ctx.beginPath();
              ctx.fillStyle = '#0aff00';
              ctx.moveTo(-8, 25);
@@ -327,7 +362,6 @@ class Player {
              ctx.lineTo(0, 25 + Math.random() * 20 + 10);
              ctx.fill();
              
-             // Side Thrusters
              ctx.beginPath();
              ctx.moveTo(-15, 20);
              ctx.lineTo(-10, 20);
@@ -343,15 +377,13 @@ class Player {
              ctx.shadowBlur = 0;
         }
 
-        // Ship Body Design
-        // Main Fuselage
         ctx.beginPath();
-        ctx.moveTo(0, -25); // Nose
-        ctx.quadraticCurveTo(10, -5, 12, 15); // Right Side
-        ctx.lineTo(8, 25); // Right Engine
-        ctx.lineTo(-8, 25); // Left Engine
-        ctx.lineTo(-12, 15); // Left Side
-        ctx.quadraticCurveTo(-10, -5, 0, -25); // Left Curve to Nose
+        ctx.moveTo(0, -25);
+        ctx.quadraticCurveTo(10, -5, 12, 15);
+        ctx.lineTo(8, 25);
+        ctx.lineTo(-8, 25);
+        ctx.lineTo(-12, 15);
+        ctx.quadraticCurveTo(-10, -5, 0, -25);
         
         const gradBody = ctx.createLinearGradient(0, -25, 0, 25);
         gradBody.addColorStop(0, '#00f3ff');
@@ -363,11 +395,10 @@ class Player {
         ctx.strokeStyle = '#00f3ff';
         ctx.stroke();
         
-        // Wings
         ctx.beginPath();
         ctx.moveTo(12, 5);
-        ctx.lineTo(35, 20); // Wing Tip
-        ctx.lineTo(12, 18); // Wing Back
+        ctx.lineTo(35, 20);
+        ctx.lineTo(12, 18);
         ctx.closePath();
         ctx.fillStyle = '#003366';
         ctx.fill();
@@ -375,27 +406,24 @@ class Player {
         
         ctx.beginPath();
         ctx.moveTo(-12, 5);
-        ctx.lineTo(-35, 20); // Wing Tip
-        ctx.lineTo(-12, 18); // Wing Back
+        ctx.lineTo(-35, 20);
+        ctx.lineTo(-12, 18);
         ctx.closePath();
         ctx.fillStyle = '#003366';
         ctx.fill();
         ctx.stroke();
         
-        // Detail Lines
         ctx.beginPath();
         ctx.moveTo(0, -10);
         ctx.lineTo(0, 20);
         ctx.strokeStyle = 'rgba(0, 243, 255, 0.3)';
         ctx.stroke();
         
-        // Cockpit
         ctx.beginPath();
         ctx.ellipse(0, -5, 4, 8, 0, 0, Math.PI * 2);
         ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
         ctx.fill();
         
-        // Shield Visual
         if (this.powerUps.shield > 0) {
             ctx.beginPath();
             ctx.arc(0, 0, 40, 0, Math.PI * 2);
@@ -410,14 +438,31 @@ class Player {
     }
 
     update() {
-        this.angle = Math.atan2(mouseY - this.y, mouseX - this.x);
+        if (mobileMode && joystickInput.active) {
+             this.angle = Math.atan2(joystickInput.y, joystickInput.x);
+        } else if (!mobileMode) {
+             this.angle = Math.atan2(mouseY - this.y, mouseX - this.x);
+        }
+        
         this.draw();
         
-        // Movement Physics
-        if (keys.w && this.y > this.radius) this.velocity.y -= PLAYER_ACCEL;
-        if (keys.s && this.y < canvas.height - this.radius) this.velocity.y += PLAYER_ACCEL;
-        if (keys.a && this.x > this.radius) this.velocity.x -= PLAYER_ACCEL;
-        if (keys.d && this.x < canvas.width - this.radius) this.velocity.x += PLAYER_ACCEL;
+        let moveX = 0;
+        let moveY = 0;
+
+        if (keys.w) moveY -= 1;
+        if (keys.s) moveY += 1;
+        if (keys.a) moveX -= 1;
+        if (keys.d) moveX += 1;
+
+        if (joystickInput.active) {
+            moveX = joystickInput.x;
+            moveY = joystickInput.y;
+        }
+
+        if (moveY < 0 && this.y > this.radius) this.velocity.y += moveY * PLAYER_ACCEL;
+        if (moveY > 0 && this.y < canvas.height - this.radius) this.velocity.y += moveY * PLAYER_ACCEL;
+        if (moveX < 0 && this.x > this.radius) this.velocity.x += moveX * PLAYER_ACCEL;
+        if (moveX > 0 && this.x < canvas.width - this.radius) this.velocity.x += moveX * PLAYER_ACCEL;
         
         this.velocity.x *= PLAYER_FRICTION;
         this.velocity.y *= PLAYER_FRICTION;
@@ -431,13 +476,11 @@ class Player {
         this.x += this.velocity.x;
         this.y += this.velocity.y;
         
-        // Bounds
         if (this.x < this.radius) { this.x = this.radius; this.velocity.x *= -0.5; }
         if (this.x > canvas.width - this.radius) { this.x = canvas.width - this.radius; this.velocity.x *= -0.5; }
         if (this.y < this.radius) { this.y = this.radius; this.velocity.y *= -0.5; }
         if (this.y > canvas.height - this.radius) { this.y = canvas.height - this.radius; this.velocity.y *= -0.5; }
         
-        // Reload Missiles
         if (this.missiles < 3) {
             this.missileTimer++;
             if (this.missileTimer > 300) {
@@ -447,12 +490,10 @@ class Player {
             }
         }
         
-        // PowerUp Timers
         if (this.powerUps.spread > 0) this.powerUps.spread--;
         if (this.powerUps.rapid > 0) this.powerUps.rapid--;
         if (this.powerUps.shield > 0) this.powerUps.shield--;
         
-        // Auto Fire if Rapid or Mouse Held
         if (keys.space || keys.mouseLeft) {
              this.shoot();
         }
@@ -462,7 +503,6 @@ class Player {
     shoot() {
         if (this.fireCooldown > 0) return;
         
-        // Bullet spread logic
         const velocity = {
             x: Math.cos(this.angle) * BULLET_SPEED,
             y: Math.sin(this.angle) * BULLET_SPEED
@@ -470,15 +510,12 @@ class Player {
 
         if (this.powerUps.spread > 0) {
              projectiles.push(new Projectile(this.x, this.y, velocity, false));
-             
              const angleLeft = this.angle - 0.2;
              const angleRight = this.angle + 0.2;
-             
              projectiles.push(new Projectile(this.x, this.y, {
                  x: Math.cos(angleLeft) * BULLET_SPEED,
                  y: Math.sin(angleLeft) * BULLET_SPEED
              }, false));
-             
              projectiles.push(new Projectile(this.x, this.y, {
                  x: Math.cos(angleRight) * BULLET_SPEED,
                  y: Math.sin(angleRight) * BULLET_SPEED
@@ -487,15 +524,14 @@ class Player {
              projectiles.push(new Projectile(this.x, this.y, velocity, false));
         }
         
-        // Rapid Fire Cooldown
         this.fireCooldown = (this.powerUps.rapid > 0) ? 5 : 15;
     }
     
     activatePowerUp(type) {
-        if (type === 'SPREAD') this.powerUps.spread = 600; // 10s
-        if (type === 'RAPID') this.powerUps.rapid = 600; // 10s
+        if (type === 'SPREAD') this.powerUps.spread = 600;
+        if (type === 'RAPID') this.powerUps.rapid = 600;
         if (type === 'SHIELD') {
-            this.powerUps.shield = 600; // 10s
+            this.powerUps.shield = 600;
             this.hp = Math.min(this.hp + 20, this.maxHp); 
             this.updateHealthUI();
         }
@@ -510,19 +546,12 @@ class Player {
     }
     
     takeDamage(amount) {
-        if (this.powerUps.shield > 0) {
-            return;
-        }
-        
+        if (this.powerUps.shield > 0) return;
         this.hp -= amount;
         screenShake = 5; 
         if (this.hp < 0) this.hp = 0;
-        
         this.updateHealthUI();
-        
-        if (this.hp <= 0) {
-            endGame();
-        }
+        if (this.hp <= 0) endGame();
     }
     
     updateHealthUI() {
@@ -594,7 +623,6 @@ class Missile {
     
     update() {
         this.draw();
-        
         if (!this.target || enemies.indexOf(this.target) === -1) {
             let minDist = Infinity;
             enemies.forEach(enemy => {
@@ -618,7 +646,6 @@ class Missile {
         this.speed = Math.min(this.speed + this.accel, this.maxSpeed);
         this.velocity.x = Math.cos(this.angle) * this.speed;
         this.velocity.y = Math.sin(this.angle) * this.speed;
-        
         this.x += this.velocity.x;
         this.y += this.velocity.y;
     }
@@ -643,24 +670,20 @@ class Enemy {
         ctx.save();
         ctx.translate(this.x, this.y);
         ctx.rotate(this.spin);
-        
         ctx.beginPath();
         for (let i = 0; i < 6; i++) {
             ctx.lineTo(this.radius * Math.cos(i * Math.PI / 3), this.radius * Math.sin(i * Math.PI / 3));
         }
         ctx.closePath();
-        
         ctx.strokeStyle = this.color;
         ctx.lineWidth = 2;
         ctx.shadowBlur = 10;
         ctx.shadowColor = this.color;
         ctx.stroke();
-        
         ctx.beginPath();
         ctx.arc(0, 0, this.radius * 0.4, 0, Math.PI * 2);
         ctx.fillStyle = this.color;
         ctx.fill();
-        
         ctx.restore();
     }
 
@@ -668,17 +691,14 @@ class Enemy {
         const angle = Math.atan2(player.y - this.y, player.x - this.x);
         this.velocity.x = Math.cos(angle) * this.speed;
         this.velocity.y = Math.sin(angle) * this.speed;
-
         this.x += this.velocity.x;
         this.y += this.velocity.y;
-        
         this.spin += this.spinSpeed;
         this.draw();
-        
         this.shootTimer--;
         if (this.shootTimer <= 0) {
             this.shoot();
-            this.shootTimer = Math.random() * 150 + 100; // Reset timer
+            this.shootTimer = Math.random() * 150 + 100;
         }
     }
     
@@ -728,16 +748,6 @@ class Particle {
     }
 }
 
-// --- Global Arrays ---
-let player;
-let projectiles = [];
-let enemies = [];
-let particles = [];
-let powerUps = [];
-let stars = [];
-let planets = [];
-let keys = { w: false, a: false, s: false, d: false, space: false, mouseLeft: false };
-
 // --- Initialization ---
 function init() {
     player = new Player(canvas.width / 2, canvas.height / 2);
@@ -750,7 +760,7 @@ function init() {
     score = 0;
     frames = 0;
     ENEMY_SPAWN_RATE = 2000;
-    scoreEl.innerText = score;
+    if (scoreEl) scoreEl.innerText = score;
     if (healthBarEl) healthBarEl.style.width = '100%';
     if (missileCountEl) missileCountEl.innerText = 3;
     
@@ -758,16 +768,14 @@ function init() {
         stars.push(new BackgroundStar());
     }
     
-    // Create Planets
     planets.push(new Planet(Math.random() * canvas.height)); 
     planets.push(new Planet(Math.random() * canvas.height));
     planets.push(new Planet(Math.random() * canvas.height));
-    planets.push(new Planet(Math.random() * canvas.height - canvas.height)); // Off-screen
+    planets.push(new Planet(Math.random() * canvas.height - canvas.height));
 }
 
 function spawnEnemies() {
     let currentSpawnRate = Math.max(800, 2000 - score / 10);
-    
     if (frames % Math.floor(currentSpawnRate / 16) === 0) {
        const radius = 30;
        let x, y;
@@ -785,11 +793,9 @@ function spawnEnemies() {
 // --- Game Loop ---
 function animate() {
     if (!gameRunning) return;
-    
     animationId = requestAnimationFrame(animate);
     frames++;
     
-    // Screen Shake
     let shakeX = 0;
     let shakeY = 0;
     if (screenShake > 0) {
@@ -799,25 +805,18 @@ function animate() {
         if (screenShake < 0.5) screenShake = 0;
     }
     
-    // Clear screen
     ctx.save();
     ctx.translate(shakeX, shakeY); 
-    
     ctx.fillStyle = 'rgba(5, 5, 16, 0.4)'; 
     ctx.fillRect(-shakeX, -shakeY, canvas.width, canvas.height);
     
     stars.forEach(star => star.update());
     planets.forEach(planet => planet.update());
-    
     player.update();
     
-    // Projectiles & Missiles
     projectiles.forEach((projectile, index) => {
         projectile.update();
-        
         let remove = false;
-        
-        // Remove off-screen including margin
         if (
             projectile.x + projectile.radius < -50 ||
             projectile.x - projectile.radius > canvas.width + 50 ||
@@ -826,162 +825,241 @@ function animate() {
         ) {
             remove = true;
         } else if (projectile instanceof Missile) {
-            // Missile Collision Logic
             enemies.forEach((enemy, eIndex) => {
                 const dist = Math.hypot(projectile.x - enemy.x, projectile.y - enemy.y);
                 if (dist - enemy.radius - projectile.radius < 5) {
-                    for (let i = 0; i < 20; i++) {
-                        particles.push(new Particle(enemy.x, enemy.y, '#ff00ff'));
-                    }
+                    for (let i = 0; i < 20; i++) particles.push(new Particle(enemy.x, enemy.y, '#ff00ff'));
                     screenShake = 10;
                     enemies.splice(eIndex, 1);
                     remove = true;
                     score += 500;
-                    scoreEl.innerText = score;
+                    if (scoreEl) scoreEl.innerText = score;
                 }
             });
         } else if (projectile.isEnemy) {
             const dist = Math.hypot(projectile.x - player.x, projectile.y - player.y);
             if (dist - projectile.radius - player.radius < 1) {
                 player.takeDamage(10);
-                for (let i = 0; i < 3; i++) {
-                    particles.push(new Particle(projectile.x, projectile.y, projectile.color));
-                }
+                for (let i = 0; i < 3; i++) particles.push(new Particle(projectile.x, projectile.y, projectile.color));
                 remove = true;
             }
         }
-        
-        if (remove) {
-            projectiles.splice(index, 1);
-        }
+        if (remove) projectiles.splice(index, 1);
     });
     
-    // PowerUps
     powerUps.forEach((pup, index) => {
         pup.update();
         if (Math.hypot(player.x - pup.x, player.y - pup.y) - player.radius - pup.radius < 1) {
             player.activatePowerUp(pup.type);
             powerUps.splice(index, 1);
             score += 50;
-            scoreEl.innerText = score;
+            if (scoreEl) scoreEl.innerText = score;
         }
         if (pup.y > canvas.height) powerUps.splice(index, 1);
     });
     
-    // Particles
     particles.forEach((particle, index) => {
-        if (particle.alpha <= 0) {
-            particles.splice(index, 1);
-        } else {
-            particle.update();
-        }
+        if (particle.alpha <= 0) particles.splice(index, 1);
+        else particle.update();
     });
 
-    // Enemies
     spawnEnemies();
     enemies.forEach((enemy, index) => {
         enemy.update();
-        
-        // Collision: Projectile hit Enemy
         projectiles.forEach((projectile, pIndex) => {
             if (projectile.isEnemy || projectile instanceof Missile) return; 
-            
             const dist = Math.hypot(projectile.x - enemy.x, projectile.y - enemy.y);
-            
             if (dist - enemy.radius - projectile.radius < 1) {
-                for (let i = 0; i < 8; i++) {
-                    particles.push(new Particle(projectile.x, projectile.y, enemy.color));
-                }
-                
-                if (Math.random() < 0.15) {
-                    powerUps.push(new PowerUp(enemy.x, enemy.y));
-                }
+                for (let i = 0; i < 8; i++) particles.push(new Particle(projectile.x, projectile.y, enemy.color));
+                if (Math.random() < 0.15) powerUps.push(new PowerUp(enemy.x, enemy.y));
                 screenShake = 2;
                 score += 100;
-                scoreEl.innerText = score;
-                
+                if (scoreEl) scoreEl.innerText = score;
                 enemies.splice(index, 1);
                 projectiles.splice(pIndex, 1);
             }
         });
         
-        // Collision: Enemy hit Player
         const distPlayer = Math.hypot(player.x - enemy.x, player.y - enemy.y);
         if (distPlayer - enemy.radius - player.radius < 1) {
              player.takeDamage(20); 
-             for (let i = 0; i < 8; i++) {
-                particles.push(new Particle(enemy.x, enemy.y, enemy.color));
-             }
+             for (let i = 0; i < 8; i++) particles.push(new Particle(enemy.x, enemy.y, enemy.color));
              enemies.splice(index, 1);
         }
     });
-    
     ctx.restore();
 }
 
-function startGame() {
+function startGame(isMobile) {
+    debugLog("Starting game: " + (isMobile ? "Mobile" : "Keyboard"));
+    mobileMode = isMobile;
     init();
     gameRunning = true;
-    startScreen.classList.add('hidden');
-    gameOverScreen.classList.add('hidden');
+    if (startScreen) startScreen.classList.add('hidden');
+    if (gameOverScreen) gameOverScreen.classList.add('hidden');
+    
+    if (mobileMode) {
+        if (mobileControls) mobileControls.classList.remove('hidden');
+    } else {
+        if (mobileControls) mobileControls.classList.add('hidden');
+    }
+    
     animate();
 }
 
 function endGame() {
+    debugLog("Game Over");
     gameRunning = false;
     cancelAnimationFrame(animationId);
-    finalScoreEl.innerText = score;
-    gameOverScreen.classList.remove('hidden');
+    if (finalScoreEl) finalScoreEl.innerText = score;
+    if (gameOverScreen) gameOverScreen.classList.remove('hidden');
+    if (mobileControls) mobileControls.classList.add('hidden');
 }
 
-// --- Event Listeners ---
-window.addEventListener('keydown', (e) => {
-    const k = e.key.toLowerCase();
-    if (keys.hasOwnProperty(k)) keys[k] = true;
-    if (e.key === 'ArrowUp') keys.w = true;
-    if (e.key === 'ArrowDown') keys.s = true;
-    if (e.key === 'ArrowLeft') keys.a = true;
-    if (e.key === 'ArrowRight') keys.d = true;
-    if (e.key === ' ') keys.space = true;
-});
+// --- Event Listeners Setup ---
+function setupEventListeners() {
+    window.addEventListener('keydown', (e) => {
+        const k = e.key.toLowerCase();
+        if (keys.hasOwnProperty(k)) keys[k] = true;
+        if (e.key === 'ArrowUp') keys.w = true;
+        if (e.key === 'ArrowDown') keys.s = true;
+        if (e.key === 'ArrowLeft') keys.a = true;
+        if (e.key === 'ArrowRight') keys.d = true;
+        if (e.key === ' ') keys.space = true;
+    });
 
-window.addEventListener('keyup', (e) => {
-    const k = e.key.toLowerCase();
-    if (keys.hasOwnProperty(k)) keys[k] = false;
-    if (e.key === 'ArrowUp') keys.w = false;
-    if (e.key === 'ArrowDown') keys.s = false;
-    if (e.key === 'ArrowLeft') keys.a = false;
-    if (e.key === 'ArrowRight') keys.d = false;
-    if (e.key === ' ') keys.space = false;
-});
+    window.addEventListener('keyup', (e) => {
+        const k = e.key.toLowerCase();
+        if (keys.hasOwnProperty(k)) keys[k] = false;
+        if (e.key === 'ArrowUp') keys.w = false;
+        if (e.key === 'ArrowDown') keys.s = false;
+        if (e.key === 'ArrowLeft') keys.a = false;
+        if (e.key === 'ArrowRight') keys.d = false;
+        if (e.key === ' ') keys.space = false;
+    });
 
-window.addEventListener('mousemove', (e) => {
-    mouseX = e.clientX;
-    mouseY = e.clientY;
-});
+    window.addEventListener('mousemove', (e) => {
+        mouseX = e.clientX;
+        mouseY = e.clientY;
+    });
 
-window.addEventListener('mousedown', (e) => {
-    if (!gameRunning) return;
-    if (e.button === 0) { 
-        keys.mouseLeft = true;
-        player.shoot(); // First shot instant
-    } else if (e.button === 2) { 
-        player.fireMissile();
+    window.addEventListener('mousedown', (e) => {
+        if (!gameRunning) return;
+        if (e.button === 0) { 
+            keys.mouseLeft = true;
+            if (player) player.shoot(); 
+        } else if (e.button === 2) { 
+            if (player) player.fireMissile();
+        }
+    });
+
+    window.addEventListener('mouseup', (e) => {
+        if (e.button === 0) keys.mouseLeft = false;
+    });
+
+    window.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    if (startBtnKeyboard) startBtnKeyboard.addEventListener('click', () => startGame(false));
+    if (startBtnTouch) startBtnTouch.addEventListener('click', () => startGame(true));
+    if (restartBtn) restartBtn.addEventListener('click', () => {
+        if (startScreen) startScreen.classList.remove('hidden');
+        if (gameOverScreen) gameOverScreen.classList.add('hidden');
+        startGame(mobileMode);
+    });
+
+    window.addEventListener('resize', () => {
+        if (canvas) {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+    });
+
+    // --- Joystick & Button Logic ---
+    if(joystickZone) {
+        joystickZone.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            const touch = e.changedTouches[0];
+            handleJoystickStart(touch.clientX, touch.clientY);
+        }, {passive: false});
+
+        joystickZone.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            const touch = e.changedTouches[0];
+            handleJoystickMove(touch.clientX, touch.clientY);
+        }, {passive: false});
+
+        joystickZone.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            handleJoystickEnd();
+        });
+
+        joystickZone.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            handleJoystickStart(e.clientX, e.clientY);
+        });
+
+        window.addEventListener('mousemove', (e) => {
+            if (joystickInput.active) {
+                e.preventDefault();
+                handleJoystickMove(e.clientX, e.clientY);
+            }
+        });
+
+        window.addEventListener('mouseup', (e) => {
+            if (joystickInput.active) {
+                e.preventDefault();
+                handleJoystickEnd();
+            }
+        });
     }
-});
 
-window.addEventListener('mouseup', (e) => {
-    if (e.button === 0) keys.mouseLeft = false;
-});
+    function handleJoystickStart(clientX, clientY) {
+        joystickInput.active = true;
+        const rect = joystickZone.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        updateJoystick(clientX, clientY, centerX, centerY);
+    }
 
-window.addEventListener('contextmenu', (e) => {
-    e.preventDefault();
-});
+    function handleJoystickMove(clientX, clientY) {
+        const rect = joystickZone.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        updateJoystick(clientX, clientY, centerX, centerY);
+    }
 
-startBtn.addEventListener('click', startGame);
-restartBtn.addEventListener('click', startGame);
+    function handleJoystickEnd() {
+        joystickInput.active = false;
+        joystickInput.x = 0;
+        joystickInput.y = 0;
+        if (joystickKnob) joystickKnob.style.transform = `translate(-50%, -50%)`;
+    }
+    
+    function updateJoystick(touchX, touchY, centerX, centerY) {
+        let dx = touchX - centerX;
+        let dy = touchY - centerY;
+        const dist = Math.hypot(dx, dy);
+        const maxDist = 40; 
+        if (dist > maxDist) {
+            const angle = Math.atan2(dy, dx);
+            dx = Math.cos(angle) * maxDist;
+            dy = Math.sin(angle) * maxDist;
+        }
+        if (joystickKnob) joystickKnob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+        joystickInput.x = dx / maxDist;
+        joystickInput.y = dy / maxDist;
+    }
 
-window.addEventListener('resize', () => {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-});
+    if (fireBtn) {
+        fireBtn.addEventListener('touchstart', (e) => { e.preventDefault(); keys.mouseLeft = true; if(player) player.shoot(); }, {passive: false});
+        fireBtn.addEventListener('touchend', (e) => { e.preventDefault(); keys.mouseLeft = false; });
+        fireBtn.addEventListener('mousedown', (e) => { e.preventDefault(); keys.mouseLeft = true; if(player) player.shoot(); });
+        fireBtn.addEventListener('mouseup', (e) => { e.preventDefault(); keys.mouseLeft = false; });
+        fireBtn.addEventListener('mouseleave', (e) => { e.preventDefault(); keys.mouseLeft = false; });
+    }
+
+    if (missileBtn) {
+        missileBtn.addEventListener('touchstart', (e) => { e.preventDefault(); if(player) player.fireMissile(); }, {passive: false});
+        missileBtn.addEventListener('mousedown', (e) => { e.preventDefault(); if(player) player.fireMissile(); });
+    }
+}
